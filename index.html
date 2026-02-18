@@ -1,141 +1,405 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta content="IE=edge" http-equiv="X-UA-Compatible">
-    <meta content="nfc-batch-uid-scanner" name="description">
-    <meta content="width=device-width, initial-scale=1" name="viewport">
-
-    <title>nfc-batch-uid-scanner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFC Batch Scanner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Custom scrollbar for logs */
+        .log-container::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .log-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .log-container::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .log-container::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
 </head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen p-4 md:p-6">
 
-<body>
-<button id="scanButton">Scan</button>
-<strong>Count=<span id="counter2">0</span></strong>
-<button disabled id="saveButton">Copy / Save (HEX)</button>
-<button disabled id="saveDecButton">Copy / Save (DEC)</button>
+    <div class="max-w-3xl mx-auto space-y-6">
+        
+        <!-- Header -->
+        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500 flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900">NFC Batch Scanner</h1>
+                <p class="text-slate-500 text-sm mt-1">Multi-format NFC Capture Tool</p>
+            </div>
+            <div class="text-right">
+                <div class="text-xs text-slate-400 uppercase font-semibold">Total Scanned</div>
+                <div class="text-4xl font-bold text-blue-600" id="counterDisplay">0</div>
+            </div>
+        </div>
 
-<h4>Log</h4>
-<pre id="output"></pre>
+        <!-- Status & Controls -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            <!-- Scan Control -->
+            <div class="bg-white rounded-xl shadow-sm p-6">
+                <h2 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fas fa-wifi mr-2 text-slate-400"></i> Scanner
+                </h2>
+                
+                <button id="scanButton" class="w-full py-4 px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold shadow transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="fas fa-play"></i> Start Scanning
+                </button>
+                
+                <div id="statusMessage" class="mt-4 text-center text-sm text-slate-500">
+                    Ready to scan
+                </div>
+            </div>
 
-<h4>Captured Data (<span id="counter1">0</span>)</h4>
-<pre id="data"></pre>
+            <!-- Export & Settings -->
+            <div class="bg-white rounded-xl shadow-sm p-6">
+                <h2 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fas fa-cog mr-2 text-slate-400"></i> Settings & Export
+                </h2>
+                
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-xs font-semibold text-slate-500 uppercase mb-1 block">Data Format</label>
+                        <select id="displayMode" class="w-full p-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 focus:outline-none focus:border-blue-500 transition-colors">
+                            <option value="hex">UID (Hex) - e.g., 04:A3:...</option>
+                            <option value="dec">UID (Decimal) - e.g., 12345...</option>
+                            <option value="ndef">NDEF Data (Text/URL)</option>
+                            <option value="raw">Raw NDEF Bytes (Hex)</option>
+                            <option value="csv">CSV Export (Excel)</option>
+                            <option value="json">JSON (Full Details)</option>
+                        </select>
+                    </div>
 
-<script>
-    const Logger = {
-        write: function () {
-            let line = Array.prototype.slice.call(arguments).map(function (argument) {
-                return typeof argument === 'string' ? argument : JSON.stringify(argument);
-            }).join(' ');
+                    <button id="saveButton" disabled class="w-full py-3 px-4 bg-white border-2 border-slate-200 hover:border-emerald-500 hover:text-emerald-600 text-slate-600 rounded-lg font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:bg-slate-50">
+                        <i class="fas fa-copy"></i> Copy / Share Data
+                    </button>
+                </div>
+            </div>
+        </div>
 
-            document.querySelector('#output').textContent += line + '\n';
-        },
+        <!-- Data Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <!-- Captured Data -->
+            <div class="bg-white rounded-xl shadow-sm p-0 overflow-hidden flex flex-col h-96">
+                <div class="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                    <h3 class="font-semibold text-slate-700">Captured Data</h3>
+                    <div class="flex gap-2">
+                        <button id="clearDataBtn" class="text-xs text-slate-400 hover:text-red-500 underline">Reset</button>
+                        <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-mono" id="dataBadge">0</span>
+                    </div>
+                </div>
+                <div class="p-4 overflow-auto flex-grow log-container bg-slate-900 text-green-400 font-mono text-xs leading-relaxed" id="dataLog"></div>
+            </div>
 
-        writeData: function () {
-            let line = Array.prototype.slice.call(arguments).map(function (argument) {
-                return typeof argument === 'string' ? argument : JSON.stringify(argument);
-            }).join(' ');
+            <!-- System Log -->
+            <div class="bg-white rounded-xl shadow-sm p-0 overflow-hidden flex flex-col h-96">
+                <div class="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                    <h3 class="font-semibold text-slate-700">System Log</h3>
+                    <button id="clearLogBtn" class="text-xs text-slate-400 hover:text-red-500 underline">Clear</button>
+                </div>
+                <div class="p-4 overflow-auto flex-grow log-container bg-slate-50 text-slate-600 font-mono text-xs leading-relaxed" id="systemLog"></div>
+            </div>
 
-            document.querySelector('#data').textContent += line + '\n';
-        },
+        </div>
 
-        clear: function () {
-            document.querySelector('#output').textContent = '';
-        },
-    };
+    </div>
 
-    if (!("NDEFReader" in window)) {
-        Logger.write("Web NFC is not available. Use Chrome on Android.");
-    }
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-lg opacity-0 transition-opacity duration-300 pointer-events-none z-50 text-sm font-medium">
+        Notification
+    </div>
 
+    <script>
+        // State
+        let scannedTags = []; // Stores objects: { uid, dec, ndef, raw, timestamp }
+        let scanning = false;
 
-    let counter = 0;
-    let tags = [];
-    let tagsDecimal = [];
+        // DOM Elements
+        const scanButton = document.getElementById('scanButton');
+        const saveButton = document.getElementById('saveButton');
+        const displayModeSelect = document.getElementById('displayMode');
+        const systemLogEl = document.getElementById('systemLog');
+        const dataLogEl = document.getElementById('dataLog');
+        const counterDisplay = document.getElementById('counterDisplay');
+        const dataBadge = document.getElementById('dataBadge');
+        const statusMessage = document.getElementById('statusMessage');
+        const toast = document.getElementById('toast');
 
-    function hexToDec(hexUid) {
-        return parseInt(hexUid.replaceAll(":", ""), 16);
-    }
+        // Helper: Toast Notification
+        function showToast(message, type = 'normal') {
+            toast.textContent = message;
+            toast.classList.remove('opacity-0');
+            
+            if(type === 'error') {
+                toast.classList.remove('bg-slate-800');
+                toast.classList.add('bg-red-600');
+            } else {
+                toast.classList.add('bg-slate-800');
+                toast.classList.remove('bg-red-600');
+            }
 
-    async function copyAndShare(data) {
-        try {
-            await navigator.clipboard.writeText(data);
-            Logger.write("Copied to clipboard successfully");
-        } catch (err) {
-            Logger.write(`Error: ${err}`);
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+            }, 3000);
         }
 
-        try {
-            await navigator.share({text: data});
-            Logger.write("Shared Successfully");
-        } catch (err) {
-            /* Logger.write(`Error: ${err}`); */
+        // Helper: Logger
+        const Logger = {
+            write: function (...args) {
+                const line = args.map(arg => typeof arg === 'string' ? arg : JSON.stringify(arg)).join(' ');
+                const timestamp = new Date().toLocaleTimeString();
+                const entry = document.createElement('div');
+                entry.className = "border-b border-slate-200/50 pb-1 mb-1 last:border-0";
+                entry.innerHTML = `<span class="text-slate-400 mr-2">[${timestamp}]</span>${line}`;
+                systemLogEl.appendChild(entry);
+                systemLogEl.scrollTop = systemLogEl.scrollHeight;
+            },
+            clear: function () {
+                systemLogEl.innerHTML = '';
+            }
+        };
+
+        // Data Management
+        function getFormattedTagData(tag) {
+            const mode = displayModeSelect.value;
+            switch(mode) {
+                case 'dec': return tag.dec;
+                case 'ndef': return tag.ndef || "(No Data)";
+                case 'raw': return tag.raw || "(No Raw Data)";
+                case 'json': return JSON.stringify(tag);
+                case 'csv': 
+                    // CSV Escape: quote strings, escape double quotes
+                    const cleanNdef = (tag.ndef || "").replace(/"/g, '""');
+                    const cleanRaw = (tag.raw || "").replace(/"/g, '""');
+                    return `"${tag.uid}","${tag.dec}","${cleanNdef}","${cleanRaw}","${tag.timestamp}"`;
+                case 'hex': 
+                default: return tag.uid;
+            }
         }
-    }
 
+        function renderDataLog() {
+            dataLogEl.innerHTML = '';
+            scannedTags.forEach(tag => {
+                const entry = document.createElement('div');
+                entry.textContent = getFormattedTagData(tag);
+                entry.className = "border-b border-green-900/30 pb-1 mb-1 last:border-0 break-all";
+                dataLogEl.appendChild(entry);
+            });
+            dataLogEl.scrollTop = dataLogEl.scrollHeight;
+        }
 
-    const scanButton = document.querySelector("#scanButton");
-    scanButton.addEventListener("click", async () => {
-        Logger.write("User clicked scan button");
+        function updateCounts() {
+            const count = scannedTags.length;
+            counterDisplay.textContent = count;
+            dataBadge.textContent = count;
+            
+            // Toggle save button
+            saveButton.disabled = count === 0;
+            
+            // Flash effect
+            counterDisplay.classList.add('text-green-500');
+            setTimeout(() => counterDisplay.classList.remove('text-green-500'), 200);
+        }
 
-        try {
-            const ndef = new NDEFReader();
+        // Helper: Convert DataView/Buffer to Hex String
+        function buf2hex(buffer) { 
+            return [...new Uint8Array(buffer)]
+                .map(x => x.toString(16).padStart(2, '0'))
+                .join(' ')
+                .toUpperCase();
+        }
+
+        // NDEF Parsing Logic
+        function parseNDEF(message) {
+            if (!message.records || message.records.length === 0) return { text: null, raw: null };
+            
+            const record = message.records[0];
             const decoder = new TextDecoder();
-            await ndef.scan();
-            Logger.write("> Scan started");
-            scanButton.disabled = true;
+            
+            let textValue = null;
+            let rawHex = null;
 
-            ndef.addEventListener("readingerror", () => {
-                Logger.write("Argh! Cannot read data from the NFC tag. Try another one?");
-            });
+            // 1. Capture Raw Hex of the payload
+            if(record.data) {
+                // Ensure we respect the offset and length of the DataView
+                const bytes = new Uint8Array(record.data.buffer, record.data.byteOffset, record.data.byteLength);
+                rawHex = buf2hex(bytes.buffer);
+            }
 
-            ndef.addEventListener("reading", ({message, serialNumber}) => {
-                saveButton.disabled = false;
-                saveDecButton.disabled = false;
-                Logger.write(`> Serial Number: ${serialNumber}`);
-                const dec = hexToDec(serialNumber);
-                Logger.write(`> Serial Number (decimal): ${dec}`);
-                Logger.write(`> Records: (${message.records.length})`);
-
-                for (const record of message.records) {
-                    Logger.write(`>> Record Type: ${record.recordType}`);
-                    Logger.write(`>> MIME Type: ${record.mediaType}`);
-                    Logger.write(`>> Record ID: ${record.id}`);
-                    try {
-                        Logger.write(`>> Data: ${decoder.decode(record.data)}`);
-                    } catch (error) {
-                        Logger.write(`>> Data: ${record.data}`);
-                    }
-                }
-
-                if (tags.includes(serialNumber)) {
-                    Logger.write(`> Duplicate Tag`);
+            // 2. Decode Content
+            try {
+                if (record.recordType === "text") {
+                    const statusByte = record.data.getUint8(0);
+                    const langCodeLen = statusByte & 0x3f;
+                    const textData = new DataView(record.data.buffer, record.data.byteOffset + 1 + langCodeLen, record.data.byteLength - 1 - langCodeLen);
+                    textValue = decoder.decode(textData);
+                } 
+                else if (record.recordType === "url") {
+                    textValue = decoder.decode(record.data);
+                } 
+                else if (record.mediaType && record.mediaType.startsWith('text/')) {
+                    textValue = decoder.decode(record.data);
                 } else {
-                    tags.push(serialNumber);
-                    tagsDecimal.push(dec);
-                    Logger.writeData(serialNumber + "\t" + dec);
-                    counter++;
-                    Logger.write(`> Tag Count: ${counter}`);
-                    document.querySelector('#counter1').textContent = `${counter}`;
-                    document.querySelector('#counter2').textContent = `${counter}`;
+                     textValue = decoder.decode(record.data);
                 }
-            });
-        } catch (error) {
-            Logger.write("> ERROR: " + error);
+            } catch (e) {
+                textValue = `(Binary: ${record.recordType})`;
+            }
+
+            return { text: textValue, raw: rawHex };
         }
-    });
 
-    const saveButton = document.querySelector("#saveButton");
-    saveButton.addEventListener("click", async () => {
-        let data = tags.join("\n");
-        await copyAndShare(data);
-    });
+        // Helper: Hex to Decimal
+        function hexToDec(hexUid) {
+            return parseInt(hexUid.replaceAll(":", ""), 16).toString();
+        }
 
-    const saveDecButton = document.querySelector("#saveDecButton");
-    saveDecButton.addEventListener("click", async () => {
-        let data = tagsDecimal.join("\n");
-        await copyAndShare(data);
-    });
-</script>
+        // Helper: Copy logic
+        async function copyToClipboardFallback(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                if(document.execCommand('copy')) {
+                    Logger.write("Copied to clipboard.");
+                    showToast("Copied to clipboard!");
+                } else {
+                    throw new Error("execCommand returned false");
+                }
+            } catch (err) {
+                Logger.write("Fallback copy failed: " + err);
+                showToast("Copy failed", 'error');
+            }
+            document.body.removeChild(textArea);
+        }
+
+        async function copyAndShare(data) {
+            if (!data) {
+                showToast("No data to copy", 'error');
+                return;
+            }
+            if (navigator.share) {
+                try {
+                    await navigator.share({ title: 'NFC Data', text: data });
+                    Logger.write("Shared successfully.");
+                    return; 
+                } catch (err) { console.log("Share skipped"); }
+            }
+            await copyToClipboardFallback(data);
+        }
+
+        // Main Logic
+        if (!("NDEFReader" in window)) {
+            Logger.write("⚠️ Web NFC is not available.");
+            statusMessage.innerHTML = "<span class='text-red-500 font-bold'>Web NFC Not Supported</span>";
+            scanButton.disabled = true;
+            scanButton.classList.add('bg-slate-400', 'cursor-not-allowed');
+            scanButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+        } else {
+            Logger.write("Ready. Select format and Start Scanning.");
+        }
+
+        scanButton.addEventListener("click", async () => {
+            try {
+                const ndef = new NDEFReader();
+                await ndef.scan();
+                
+                scanning = true;
+                Logger.write("✅ Scan started.");
+                scanButton.disabled = true;
+                scanButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning Active...';
+                statusMessage.innerHTML = "<span class='text-green-600 font-bold animate-pulse'>Scanning... Tap tags</span>";
+
+                ndef.addEventListener("readingerror", () => {
+                    Logger.write("❌ Read Error.");
+                    showToast("Read Error", 'error');
+                });
+
+                ndef.addEventListener("reading", ({message, serialNumber}) => {
+                    const uid = serialNumber;
+                    
+                    // Duplicate Check (Always based on UID)
+                    if (scannedTags.some(t => t.uid === uid)) {
+                        Logger.write(`⚠️ Duplicate: ${uid}`);
+                        showToast("Duplicate Tag");
+                        return;
+                    }
+
+                    // Process Data
+                    const dec = hexToDec(uid);
+                    const parsed = parseNDEF(message);
+
+                    const tagObj = {
+                        uid: uid,
+                        dec: dec,
+                        ndef: parsed.text,
+                        raw: parsed.raw,
+                        timestamp: new Date().toISOString()
+                    };
+
+                    scannedTags.push(tagObj);
+                    
+                    // Logging
+                    Logger.write(`Tag Detected: ${uid}`);
+                    if (parsed.text) Logger.write(`> Content: ${parsed.text}`);
+                    
+                    updateCounts();
+                    renderDataLog(); // Update view based on current selection
+                    showToast("Tag Saved!");
+                });
+
+            } catch (error) {
+                Logger.write("❌ ERROR: " + error);
+                statusMessage.textContent = "Error: " + error;
+                scanButton.disabled = false;
+                scanButton.innerHTML = '<i class="fas fa-play"></i> Retry Scanning';
+            }
+        });
+
+        // Event Listeners
+        saveButton.addEventListener("click", async () => {
+            let data = scannedTags.map(tag => getFormattedTagData(tag)).join("\n");
+            
+            // If CSV mode, prepend headers
+            if(displayModeSelect.value === 'csv') {
+                const header = "UID_Hex,UID_Decimal,NDEF_Content,NDEF_Raw_Hex,Timestamp\n";
+                data = header + data;
+            }
+            
+            await copyAndShare(data);
+        });
+
+        // When user changes the dropdown, refresh the list immediately
+        displayModeSelect.addEventListener("change", () => {
+            Logger.write(`Display mode changed to: ${displayModeSelect.options[displayModeSelect.selectedIndex].text}`);
+            renderDataLog();
+        });
+
+        document.getElementById('clearLogBtn').addEventListener('click', () => Logger.clear());
+        
+        document.getElementById('clearDataBtn').addEventListener('click', () => {
+            if(confirm("Clear all captured data?")) {
+                scannedTags = [];
+                updateCounts();
+                renderDataLog();
+                Logger.write("Data cleared.");
+            }
+        });
+
+    </script>
 </body>
 </html>
