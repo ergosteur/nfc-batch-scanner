@@ -122,6 +122,7 @@
         // State
         let scannedTags = []; // Stores objects: { uid, dec, ndef, raw, timestamp }
         let scanning = false;
+        let abortController = null;
 
         // DOM Elements
         const scanButton = document.getElementById('scanButton');
@@ -314,15 +315,38 @@
         }
 
         scanButton.addEventListener("click", async () => {
+            // IF ALREADY SCANNING -> STOP
+            if (scanning) {
+                if (abortController) {
+                    abortController.abort();
+                    abortController = null;
+                }
+                scanning = false;
+                
+                // Reset UI
+                scanButton.classList.remove('bg-red-600', 'hover:bg-red-700', 'animate-pulse');
+                scanButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                scanButton.innerHTML = '<i class="fas fa-play"></i> Start Scanning';
+                statusMessage.textContent = "Ready to scan";
+                Logger.write("⏹️ Scanning stopped by user.");
+                return;
+            }
+
+            // IF NOT SCANNING -> START
             try {
                 const ndef = new NDEFReader();
-                await ndef.scan();
+                abortController = new AbortController();
+                
+                await ndef.scan({ signal: abortController.signal });
                 
                 scanning = true;
                 Logger.write("✅ Scan started.");
-                scanButton.disabled = true;
-                scanButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning Active...';
-                statusMessage.innerHTML = "<span class='text-green-600 font-bold animate-pulse'>Scanning... Tap tags</span>";
+                
+                // Set UI to Scanning Mode
+                scanButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                scanButton.classList.add('bg-red-600', 'hover:bg-red-700', 'animate-pulse');
+                scanButton.innerHTML = '<i class="fas fa-stop"></i> Stop Scanning';
+                statusMessage.innerHTML = "<span class='text-green-600 font-bold'>Scanning Active... Tap tags</span>";
 
                 ndef.addEventListener("readingerror", () => {
                     Logger.write("❌ Read Error.");
@@ -365,7 +389,10 @@
             } catch (error) {
                 Logger.write("❌ ERROR: " + error);
                 statusMessage.textContent = "Error: " + error;
-                scanButton.disabled = false;
+                // Reset UI
+                scanning = false;
+                scanButton.classList.remove('bg-red-600', 'hover:bg-red-700', 'animate-pulse');
+                scanButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
                 scanButton.innerHTML = '<i class="fas fa-play"></i> Retry Scanning';
             }
         });
